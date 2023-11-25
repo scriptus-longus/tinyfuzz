@@ -1,0 +1,6 @@
+cases/*
+target/*
+corpus/*
+.
+fuzz
+
