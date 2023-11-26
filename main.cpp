@@ -13,6 +13,7 @@
 #include <cstring>
 #include <sys/personality.h>
 #include <algorithm>
+#include <cmath>
 //using namespace std;
 
 // parameters
@@ -20,18 +21,29 @@
 #define CORPUS_DIR "corpus/"
 #define TEST_CASES_PATH "cases/"
 #define DEBUG_LOG true
+#define BREAKPOINT_FILE ".bp_list"
 
 #define SEED 1337
 
 const int FLIP_ARRAY[] =  {1, 2, 4, 8, 16, 32, 64};
 const int CYCLE_LENS[] =  {1, 2, 4, 8, 16, 32};
 
-std::vector<uint64_t> known_addresses;
+int INIT_ADDR = 0x1000;
+
 
 struct corpus_file {
   std::string filename;
   std::string content;
 } typedef corpus_file;
+
+struct Breakpoint {
+  int addr;
+  uint64_t instr;
+};
+
+
+std::vector<uint64_t> known_addresses;
+std::vector<Breakpoint> breakpoints;
 
 std::string cat_path(std::string path, std::string filename) {
   if (path.back() != '/') {
@@ -104,6 +116,43 @@ uint64_t find_base_addr(uint64_t pid, std::string program_name) {
   }
   return ret; 
 }
+
+void load_breakpoints(std::string bp_file_name) {
+  // read breakpoint file and elf file to extract instruction
+  std::ifstream     bp_file_stream (bp_file_name); 
+  std::ifstream     elf            (TARGET_PROGRAM, std::fstream::binary); // TODO: change
+  std::stringstream content;
+
+  content << elf.rdbuf();
+
+  std::string line;
+
+  uint64_t instr;
+  int idx;
+  struct Breakpoint current_breakpoint;
+
+  while (std::getline(bp_file_stream, line)) {
+    idx = stoi(line.substr(0, 4), 0, 16);
+
+    instr = 0;
+    for (int i = 0; i < 8; i++) {
+      instr += (((uint64_t)content.str()[idx+i] & 0xff) << i*8);
+    }
+
+    //std::cout << std::hex << instr <<std::endl;
+ 
+    current_breakpoint = {.addr = idx - INIT_ADDR, .instr = instr}; 
+
+    breakpoints.push_back(current_breakpoint);
+  }
+
+  /*
+  for (int i = 0; i < breakpoints.size(); i++) {
+    std::cout << std::hex << breakpoints[i].instr << std::endl;
+  }*/
+ 
+  return;
+}
   
 
 bool execute_fuzz(const char *program, const char *data) {
@@ -111,7 +160,14 @@ bool execute_fuzz(const char *program, const char *data) {
   int status;
   siginfo_t targetsig;
   struct user_regs_struct regs;
-  uint64_t base;
+  uint64_t base = 0x555555555000;
+  //long main_addr = 0x5555555552c1;
+  uint64_t addr;
+  long breakpoint_instr;
+  uint64_t int3 = 0x0;
+  char instr = 0xcc;
+  int3 = int3 + instr;
+  std::vector<uint64_t> breakpoints_hit;
 
   proc = fork();
   if (proc == 0) {
@@ -121,14 +177,21 @@ bool execute_fuzz(const char *program, const char *data) {
     execl(program, program, data, NULL);
   } else {
     int status;
-    
-    while(waitpid(proc, &status, 0)) { //&& ! WIFEXITED(status)) {
+    wait(NULL);
+    for (int i =0; i < breakpoints.size(); i++) { 
+      //breakpoint_instr = ptrace(PTRACE_PEEKDATA, proc, main_addr, NULL);
+      addr =  base + breakpoints[i].addr;
+      ptrace(PTRACE_POKEDATA, proc, addr, ((breakpoints[i].instr & ~0xff) | (uint64_t)int3 & 0xff));
+      //ptrace(PTRACE_POKEDATA, proc, main_addr, ((breakpoints_instr & ~0xff) | (uint64_t)int3 & 0xff));
+      //breakpoint_instr = ptrace(PTRACE_PEEKDATA, proc, main_addr, NULL);
+      //std::cout << std::hex << addr << std::endl;
+    }
+    ptrace(PTRACE_CONT, proc, NULL, NULL);
+
+    while(waitpid(proc, &status, 0)) { 
       if (WIFEXITED(status)) {
         ptrace(PTRACE_GETSIGINFO, proc, NULL, &targetsig);
         ptrace(PTRACE_GETREGSET, proc, NULL, &regs);
-        //std::cout << "exiting...\n";
-        //std::cout << std::hex << regs.rip << '\n';
-        //std::cin.get();
         break;
       }
 
@@ -139,7 +202,10 @@ bool execute_fuzz(const char *program, const char *data) {
 
       if (targetsig.si_signo == SIGSEGV) {
         break;
-      }  
+      } else if (targetsig.si_signo == SIGTRAP) {
+        //std::cout << "hit breakpoint at " <<  std::hex <<regs.rip << '\n';
+        breakpoints_hit.push_back(regs.rip);  // TODO: check independence
+      }
       
       ptrace(PTRACE_CONT, proc, NULL, NULL);
     }
@@ -183,6 +249,10 @@ int main(int argc, char *argv[]) {
       corpus_files.push_back(current_file);
     }
   } 
+
+  load_breakpoints("bp_list");
+  //return 0;
+
   std::string tmp = cat_path(cases_dir, "sample1.txt");  // write to variable first so it does not get destroyed after ret
   const char *data = tmp.c_str();
   const char *program = target.c_str();
