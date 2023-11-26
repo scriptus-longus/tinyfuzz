@@ -19,10 +19,12 @@
 #define TARGET_PROGRAM "target/simple"
 #define CORPUS_DIR "corpus/"
 #define TEST_CASES_PATH "cases/"
+#define DEBUG_LOG true
 
 #define SEED 1337
 
-const int FLIP_ARRAY[] =  {1, 2, 4, 8, 16, 32, 64, 128};
+const int FLIP_ARRAY[] =  {1, 2, 4, 8, 16, 32, 64};
+const int CYCLE_LENS[] =  {1, 2, 4, 8, 16, 32};
 
 std::vector<uint64_t> known_addresses;
 
@@ -54,15 +56,20 @@ std::string read_file(std::string path) {
 }
 
 void bit_flip(std::string &data, uint32_t idx) {
-  uint32_t bit = FLIP_ARRAY[rand() % 8];
+  uint32_t bit = FLIP_ARRAY[rand() % 7];
   data[idx] = data[idx] ^ bit; 
 }
 
 std::string mutate_data(std::string data) {
-  uint32_t idx = (uint32_t)(rand() % data.size());
+  uint32_t n = CYCLE_LENS[rand() % 6];
   std::string ret = data; 
+
+  for (uint32_t i = 0; i < n; i++) {
+    uint32_t idx = (uint32_t)(rand() % data.size());
  
-  bit_flip(ret, idx);
+    bit_flip(ret, idx);
+
+  }
   return ret;
 }
 
@@ -140,7 +147,7 @@ bool execute_fuzz(const char *program, const char *data) {
     // check if crash was sigsegv and unique
     if (targetsig.si_signo == SIGSEGV) {
       if (!std::count(known_addresses.begin(), known_addresses.end(), regs.rip)) {
-        std::cout << std::hex << regs.rip << '\n';
+        //std::cout << std::hex << regs.rip << '\n';
         known_addresses.push_back(regs.rip);
         return true;
       }
@@ -179,6 +186,7 @@ int main(int argc, char *argv[]) {
   std::string tmp = cat_path(cases_dir, "sample1.txt");  // write to variable first so it does not get destroyed after ret
   const char *data = tmp.c_str();
   const char *program = target.c_str();
+  uint32_t content_size = 0;
 
   // fuzzing loop
   while (1) {
@@ -188,16 +196,31 @@ int main(int argc, char *argv[]) {
       std::ofstream mutated_file(cat_path(cases_dir, "sample1.txt"));
 
       std::string content = mutate_data(corpus_files[0].content);
-  
-      mutated_file << content;
 
+      mutated_file << content;
+      content_size = content.size();
       mutated_file.close(); 
       // run the fuzzer
       found_crash = execute_fuzz(program, data);
 
       if (found_crash) {
         std::cout << "[*] Found crash ...\n";
-        std::cout << "Content " << content;
+        std::cout << "content ";
+
+        for (int i  = 0; i < content.size(); i++) {
+          std::cout << int(content[i]) << " ";
+          //std::cout << std::hex << (uint8_t)content[i] << " "; 
+        }
+
+        std::cout << "\n";
+        if (DEBUG_LOG) {
+          std::cout << "[DEBUG] Known crash addresses:\n";
+
+          for (int i = 0; i < known_addresses.size(); i++) {
+            std::cout << (void *)known_addresses[i] << " "; 
+          } 
+          std::cout << "\n";
+        }
       }
     }
   }
