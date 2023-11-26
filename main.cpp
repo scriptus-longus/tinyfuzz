@@ -12,6 +12,7 @@
 #include <string>
 #include <cstring>
 #include <sys/personality.h>
+#include <algorithm>
 //using namespace std;
 
 // parameters
@@ -23,7 +24,7 @@
 
 const int FLIP_ARRAY[] =  {1, 2, 4, 8, 16, 32, 64, 128};
 
-std::vector<int> known_addresses;
+std::vector<uint64_t> known_addresses;
 
 struct corpus_file {
   std::string filename;
@@ -68,7 +69,7 @@ std::string mutate_data(std::string data) {
 uint64_t find_base_addr(uint64_t pid, std::string program_name) {
   std::stringstream path;
   path << "/proc/" << pid << "/maps";
-  //std::cout << path.str() << '\n'; 
+  std::cout << path.str() << '\n'; 
   std::ifstream map(path.str());
 
   uint64_t ret = 0; 
@@ -107,9 +108,10 @@ bool execute_fuzz(const char *program, const char *data) {
 
   proc = fork();
   if (proc == 0) {
+    personality(ADDR_NO_RANDOMIZE);
     ptrace(PTRACE_TRACEME, proc, NULL, NULL);
     freopen("/dev/null", "w", stdout); // no stdout
-    execl("./target/simple", program, data, NULL);
+    execl(program, program, data, NULL);
   } else {
     int status;
     
@@ -117,6 +119,9 @@ bool execute_fuzz(const char *program, const char *data) {
       if (WIFEXITED(status)) {
         ptrace(PTRACE_GETSIGINFO, proc, NULL, &targetsig);
         ptrace(PTRACE_GETREGSET, proc, NULL, &regs);
+        //std::cout << "exiting...\n";
+        //std::cout << std::hex << regs.rip << '\n';
+        //std::cin.get();
         break;
       }
 
@@ -124,21 +129,21 @@ bool execute_fuzz(const char *program, const char *data) {
       if (ptrace(PTRACE_GETREGS, proc, NULL, &regs) == -1) {
         std::cout << "cant read regs\n";
       }
-      //std::cout << std::hex << regs.rip << '\n';
-      //base = find_base_addr(proc, (std::string)program);
 
-      //if (base == 0) {
-      //  std::cout << "[WARNING] could not identify base\n";
-      //}
-      
+      if (targetsig.si_signo == SIGSEGV) {
+        break;
+      }  
       
       ptrace(PTRACE_CONT, proc, NULL, NULL);
     }
 
+    // check if crash was sigsegv and unique
     if (targetsig.si_signo == SIGSEGV) {
-      std::cout << regs.rip << '\n';
-      std::cout << std::hex << base << '\n';
-      return true;
+      if (!std::count(known_addresses.begin(), known_addresses.end(), regs.rip)) {
+        std::cout << std::hex << regs.rip << '\n';
+        known_addresses.push_back(regs.rip);
+        return true;
+      }
     }
   }
   return false;
@@ -146,7 +151,6 @@ bool execute_fuzz(const char *program, const char *data) {
 
 int main(int argc, char *argv[]) {
   srand(SEED);
-  personality(ADDR_NO_RANDOMIZE);
  
   const std::string target = TARGET_PROGRAM;
   const std::string corpus_dir = CORPUS_DIR;
@@ -164,7 +168,7 @@ int main(int argc, char *argv[]) {
 
   corpus_file current_file;
   // load all files and contents into corpus_file vecotr
-  while (entry = readdir(dp)) {
+  while ((entry = readdir(dp))) {
     if (entry->d_name[0] != '.') {
       current_file.filename = entry->d_name; 
       current_file.content = read_file(cat_path(corpus_dir, entry->d_name));     
