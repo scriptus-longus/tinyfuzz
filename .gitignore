@@ -1,6 +1,6 @@
 cases/*
 target/*
 corpus/*
-.
+.*
 fuzz
 

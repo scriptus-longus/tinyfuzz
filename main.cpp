@@ -11,6 +11,7 @@
 #include <sys/types.h>
 #include <string>
 #include <cstring>
+#include <sys/personality.h>
 //using namespace std;
 
 // parameters
@@ -21,6 +22,8 @@
 #define SEED 1337
 
 const int FLIP_ARRAY[] =  {1, 2, 4, 8, 16, 32, 64, 128};
+
+std::vector<int> known_addresses;
 
 struct corpus_file {
   std::string filename;
@@ -62,30 +65,79 @@ std::string mutate_data(std::string data) {
   return ret;
 }
 
+uint64_t find_base_addr(uint64_t pid, std::string program_name) {
+  std::stringstream path;
+  path << "/proc/" << pid << "/maps";
+  //std::cout << path.str() << '\n'; 
+  std::ifstream map(path.str());
+
+  uint64_t ret = 0; 
+ 
+  std::string line;
+  while (std::getline(map, line)) { 
+    //std::cout << segmentd_line.size() << '\n';
+    if (line.size() < 74) {
+      continue;
+    } 
+    if (line[25] != ' ') {
+      continue;
+    }
+    if (line[73] != '/') {
+      continue;
+    }
+    
+    if (line[28]  == 'x' && line.find(program_name) != std::string::npos) {
+      std::string addr_str = line.substr(0, 11);
+      ret = stol(addr_str, 0, 16);
+      //std::cout << ret << '\n';
+      //std::cout << addr_str << '\n';
+      break;
+    } 
+  }
+  return ret; 
+}
+  
+
 bool execute_fuzz(const char *program, const char *data) {
   pid_t proc;
   int status;
   siginfo_t targetsig;
   struct user_regs_struct regs;
+  uint64_t base;
 
   proc = fork();
   if (proc == 0) {
     ptrace(PTRACE_TRACEME, proc, NULL, NULL);
     freopen("/dev/null", "w", stdout); // no stdout
-    execl(program, program, data, NULL);
+    execl("./target/simple", program, data, NULL);
   } else {
     int status;
+    
+    while(waitpid(proc, &status, 0)) { //&& ! WIFEXITED(status)) {
+      if (WIFEXITED(status)) {
+        ptrace(PTRACE_GETSIGINFO, proc, NULL, &targetsig);
+        ptrace(PTRACE_GETREGSET, proc, NULL, &regs);
+        break;
+      }
 
-    while(waitpid(proc, &status, 0) && ! WIFEXITED(status)) {
-      struct user_regs_struct regs; 
       ptrace(PTRACE_GETSIGINFO, proc, NULL, &targetsig);
-      ptrace(PTRACE_GETREGS, proc, NULL, &regs);
+      if (ptrace(PTRACE_GETREGS, proc, NULL, &regs) == -1) {
+        std::cout << "cant read regs\n";
+      }
+      //std::cout << std::hex << regs.rip << '\n';
+      //base = find_base_addr(proc, (std::string)program);
 
+      //if (base == 0) {
+      //  std::cout << "[WARNING] could not identify base\n";
+      //}
+      
       
       ptrace(PTRACE_CONT, proc, NULL, NULL);
     }
 
     if (targetsig.si_signo == SIGSEGV) {
+      std::cout << regs.rip << '\n';
+      std::cout << std::hex << base << '\n';
       return true;
     }
   }
@@ -94,6 +146,7 @@ bool execute_fuzz(const char *program, const char *data) {
 
 int main(int argc, char *argv[]) {
   srand(SEED);
+  personality(ADDR_NO_RANDOMIZE);
  
   const std::string target = TARGET_PROGRAM;
   const std::string corpus_dir = CORPUS_DIR;
