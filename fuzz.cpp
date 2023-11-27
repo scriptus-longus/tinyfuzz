@@ -174,9 +174,9 @@ int main(int argc, char *argv[]) {
         if (DEBUG_LOG) {
           std::cout << "[DEBUG] Known crash addresses:\n";
 
-          /*for (int i = 0; i < known_addresses.size(); i++) {
+          for (int i = 0; i < known_addresses.size(); i++) {
             std::cout << (void *)known_addresses[i] << " "; 
-          } */
+          } 
           std::cout << "\n";
         }
       }
