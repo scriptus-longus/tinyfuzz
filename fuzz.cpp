@@ -14,7 +14,9 @@
 #include <sys/personality.h>
 #include <algorithm>
 #include <cmath>
+#include <tuple>
 #include "tracer.cpp"
+#include "mutator.cpp"
 
 // parameters
 #define TARGET_PROGRAM "target/simple"
@@ -25,13 +27,17 @@
 
 #define SEED 1337
 
-const int FLIP_ARRAY[] =  {1, 2, 4, 8, 16, 32, 64};
-const int CYCLE_LENS[] =  {1, 2, 4, 8, 16, 32};
+/*
+typedef void (*mutation_func) (std::string &data, uint32_t idx);
 
-struct corpus_file {
+const uint8_t FLIP_ARRAY[] =  {1, 2, 4, 8, 16, 32, 64};
+const int CYCLE_LENS[] =  {1, 2, 4, 8, 16, 32};
+const int BLOCK_SIZES[] = {1, 2, 4, 8, 16, 32, 64};
+*/
+/*struct corpus_file {
   std::string filename;
   std::string content;
-} typedef corpus_file;
+} typedef corpus_file;*/
 
 
 std::vector<uint64_t> known_addresses;
@@ -60,18 +66,52 @@ std::string read_file(std::string path) {
 }
 
 void bit_flip(std::string &data, uint32_t idx) {
-  uint32_t bit = FLIP_ARRAY[rand() % 7];
+  uint8_t bit = FLIP_ARRAY[rand() % 7];
   data[idx] = data[idx] ^ bit; 
+}
+
+void byte_flip(std::string &data, uint32_t idx) {
+  uint8_t byte =  rand() % 0xff; 
+  data[idx] = data[idx] ^ byte; 
+}
+
+void add_block(std::string &data, uint32_t idx) {
+  std::string block;
+  uint8_t byte;
+  int size = BLOCK_SIZES[rand() % 7];
+
+  for (int i = 0; i < size; i++) {
+    uint8_t byte =  rand() % 0xff; 
+    block.push_back((char)byte);
+  }
+
+  data.insert(idx, block);
+}
+
+void remove_block(std::string &data, uint32_t idx) {
+  int size_idx = rand() % 7;
+
+  while (idx + BLOCK_SIZES[size_idx] > data.size()-1) {
+    size_idx -= 1;
+    if (size_idx < 0) {
+      return;
+    }
+  }
+
+  data.erase(idx, BLOCK_SIZES[size_idx]);
 }
 
 std::string mutate_data(std::string data) {
   uint32_t n = CYCLE_LENS[rand() % 6];
   std::string ret = data; 
 
+  mutation_func mutations[] = {bit_flip, byte_flip, add_block, remove_block};
+
   for (uint32_t i = 0; i < n; i++) {
-    uint32_t idx = (uint32_t)(rand() % data.size());
+    uint32_t idx = (uint32_t)(rand() % ret.size());
+    auto mutation = mutations[rand() % 4];
  
-    bit_flip(ret, idx);
+    mutation(ret, idx);
 
   }
   return ret;
@@ -111,77 +151,31 @@ uint64_t find_base_addr(uint64_t pid, std::string program_name) {
 
 
 int main(int argc, char *argv[]) {
-  srand(SEED);
- 
   const std::string target = TARGET_PROGRAM;
   const std::string corpus_dir = CORPUS_DIR;
   const std::string cases_dir = TEST_CASES_PATH;
   std::vector<corpus_file> corpus_files; 
-   
-  DIR *dp;
-  struct dirent *entry;
-  dp = opendir(corpus_dir.c_str());
   
-  if (dp == NULL) {
-    perror("No Corpus dir.");
-    exit(0);
-  }
-
-  corpus_file current_file;
-  // load all files and contents into corpus_file vecotr
-  while ((entry = readdir(dp))) {
-    if (entry->d_name[0] != '.') {
-      current_file.filename = entry->d_name; 
-      current_file.content = read_file(cat_path(corpus_dir, entry->d_name));     
- 
-      corpus_files.push_back(current_file);
-    }
-  } 
-
   Tracer tracer = Tracer(target.c_str());
+  Mutator mutator = Mutator(corpus_dir, SEED);
 
-  std::string tmp = cat_path(cases_dir, "sample1.txt");  // write to variable first so it does not get destroyed after ret
-  const char *data = tmp.c_str();
-  const char *program = target.c_str();
-  uint32_t content_size = 0;
-
-  // fuzzing loop
   while (1) {
-    for (uint32_t i = 0; i < corpus_files.size(); i++) {
-      bool found_crash = false;
-      // write mutated data to file
-      std::ofstream mutated_file(cat_path(cases_dir, "sample1.txt"));
+    corpus_file test_case = mutator.get();
 
-      std::string content = mutate_data(corpus_files[0].content);
+    bool found_crash = tracer.run(test_case.filename.c_str());
 
-      mutated_file << content;
-      content_size = content.size();
-      mutated_file.close(); 
-      // run the fuzzer
-      //found_crash = execute_fuzz(program, data);
-      found_crash = tracer.run(data);
+    if (found_crash) {
+      std::cout << "[*] Found crash ...\n";
+      std::cout << "content ";
 
-      if (found_crash) {
-        std::cout << "[*] Found crash ...\n";
-        std::cout << "content ";
-
-        for (int i  = 0; i < content.size(); i++) {
-          std::cout << int(content[i]) << " ";
-          //std::cout << std::hex << (uint8_t)content[i] << " "; 
-        }
-
-        std::cout << "\n";
-        if (DEBUG_LOG) {
-          std::cout << "[DEBUG] Known crash addresses:\n";
-
-          for (int i = 0; i < known_addresses.size(); i++) {
-            std::cout << (void *)known_addresses[i] << " "; 
-          } 
-          std::cout << "\n";
-        }
+      for (auto c: test_case.content) {
+        std::cout << std::hex << int((uint8_t)c) << " ";
       }
+
+      std::cout << "\n";
     }
+
   }
- 
+
   return 0;
 }
