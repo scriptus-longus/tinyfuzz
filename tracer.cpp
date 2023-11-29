@@ -11,13 +11,9 @@
 #include <cstring>
 #include <sys/personality.h>
 #include <algorithm>
+#include "fuzz.hpp"
 
 uint32_t INIT_ADDR = 0x1000;
-
-struct Breakpoint {
-  uint32_t addr;
-  uint64_t instr;
-};
 
 class Tracer {
 private:
@@ -27,7 +23,7 @@ private:
   std::vector<Breakpoint> breakpoints;
   std::string elf_file;
 
-  const uint64_t base = 0x555555555000; // change to config
+  const uint64_t base = 0x555555555000; // TODO: change to config
 
   void load_breakpoints(std::string bp_file_name) {
     std::ifstream     bp_file_stream (bp_file_name); 
@@ -45,7 +41,6 @@ private:
       for (int i = 0; i < 8; i++) {
         instr += (((uint64_t)this->elf_file[idx+i] & 0xff) << i*8);
       }
-      //current_breakpoint = {.addr = idx - INIT_ADDR, .instr = instr}; 
 
       this->breakpoints.push_back({idx - INIT_ADDR, instr});
     }
@@ -59,21 +54,23 @@ public:
     this->program = program;
 
     // read file and store to string so we can later dump instructions for breakpoint creation 
-    std::ifstream     elf(this->program, std::fstream::binary); // TODO: change
+    std::ifstream     elf(this->program, std::fstream::binary); 
     std::stringstream content;
     content << elf.rdbuf();
 
     this->elf_file = content.str();
 
-    load_breakpoints(".bp_list"); // TODO: load filename from config
+    load_breakpoints(BREAKPOINT_FILE); 
   }
 
-  bool run(const char *data) {
+  CrashType run(const char *data) {
     int status;
     struct user_regs_struct regs;
     siginfo_t signal;
     std::vector<uint64_t> execution_path;
     pid_t proc;
+  
+    CrashType ret;
   
     proc = fork();
     if (proc == 0) {
@@ -115,16 +112,29 @@ public:
         ptrace(PTRACE_CONT, proc, NULL, NULL);
       }
 
+      ret.addr = regs.rip;
+      ret.execution_path = execution_path;
+      ret.segfault = false;
+
       // check if crash was sigsegv and unique
       if (signal.si_signo == SIGSEGV) {
         // filter unique crashes
+        if (DEBUG_LOG) {
+          std::cout << "==========UNIQUE CRASHES IN TRACER===========\n";
+          for (auto x: this->unique_crashes) 
+            std::cout << std::hex << x << "\n";
+          std::cout << "=============================================\n"; 
+
+        } 
+
         if (!std::count(this->unique_crashes.begin(), this->unique_crashes.end(), regs.rip)) {
           this->unique_crashes.push_back(regs.rip);
-          return true;
+          //return true;
+          ret.segfault = true;
         }
       }
     }
-    return false;
+    return ret;
 
   }
 };

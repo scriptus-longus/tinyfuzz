@@ -4,24 +4,19 @@
 #include <vector>
 #include <fstream>
 #include <sstream>
-#include <tuple>
+#include "fuzz.hpp"
+#include "utils.hpp"
 
 const uint8_t FLIP_ARRAY[] =  {1, 2, 4, 8, 16, 32, 64};
 const int CYCLE_LENS[] =  {1, 2, 4, 8, 16, 32};
 const int BLOCK_SIZES[] = {1, 2, 4, 8, 16, 32, 64};
-
-typedef void (*mutation_func) (std::string &data, uint32_t idx);
-
-struct corpus_file {
-  std::string filename;
-  std::string content;
-} typedef corpus_file;
 
 class Mutator {
 private:
   std::string corpus_dir;
   std::string cases_path = "cases/";
   std::vector<corpus_file> pool;
+  std::vector<CrashType> known_crashes;
 
   void bit_flip(std::string &data, uint32_t idx) {
     uint8_t bit = FLIP_ARRAY[rand() % 7];
@@ -59,19 +54,6 @@ private:
     data.erase(idx, BLOCK_SIZES[size_idx]);
   }
 
-  std::string read_content_corpus_file(std::string path) {
-    std::ifstream file_stream(path);
-    std::stringstream buffer;
-    std::string ret;// = new std::string;
-
-
-    buffer << file_stream.rdbuf();
-    ret.append(buffer.str());
-
-    file_stream.close();
-    return ret;
-  }
-
   void load_corpus() {
     DIR *corpus_dir_ptr;
     struct dirent *corpus_file_entry;
@@ -86,19 +68,18 @@ private:
     while((corpus_file_entry = readdir(corpus_dir_ptr))) {
       if (corpus_file_entry->d_name[0] != '.') {
         this->corpus.push_back({corpus_file_entry->d_name, 
-                                read_content_corpus_file(this->corpus_dir + "/" + corpus_file_entry->d_name)}); 
+                                read_file(this->corpus_dir + "/" + corpus_file_entry->d_name)}); 
       }
     }
+    /*
     for (auto x: this->corpus) {
       std::cout << x.filename << " " << x.content << '\n';
-    }
+    }*/
   }
 
   std::string mutate(std::string data){
     uint32_t n = CYCLE_LENS[rand() % 6];
     std::string ret = data; 
-
-    //auto& mutations[] = {this->bit_flip, this->byte_flip, this->add_block, this->remove_block};
 
     for (uint32_t i = 0; i < n; i++) {
       uint32_t idx = (uint32_t)(rand() % ret.size());
@@ -113,19 +94,25 @@ private:
     return ret;
   }
 
+  bool crash_eq(CrashType c1, CrashType c2) {
+    if (c1.execution_path == c2.execution_path && c1.addr == c2.addr) {
+      return true;
+    } 
+    return false;
+  }
+
   void create_pool() {
+    // TODO: write to multiple output files
+    // TODO: multiple mutions from one corpus sample 
     for (auto x: this->corpus) {
       this->pool.push_back({this->cases_path + "sample1.txt", mutate(x.content)}); 
     }
 
-    /*
-    for (auto x: this->pool) {
-      std::cout << x.filename << " ";
-      for (auto c: x.content) {
-        std::cout << std::hex << (int)((uint8_t)c) << " ";
-      }
-      std::cout << "\n";
-    }*/
+    // sample from crashes
+    for (int i = 0; i < this->known_crashes.size(); i++) {
+      this->pool.push_back({this->cases_path + "sample_" + long_to_str(this->known_crashes[i].addr) + ".txt", 
+                            mutate(this->known_crashes[i].content)});
+    }
   }
 
 
@@ -139,7 +126,38 @@ public:
     this->create_pool();
   }
 
- corpus_file get() {
+  void add(CrashType crash) {
+    for (int i = 0;  i < this->known_crashes.size(); i++) {
+      //if (this->known_crashes[i].execution_path == crash.execution_path){
+      if (crash_eq(this->known_crashes[i], crash)) {
+        // check if content is smaller to truncate crash
+
+        if (this->known_crashes[i].content.size() > crash.content.size()) {
+          this->known_crashes[i] = crash; 
+          if (DEBUG_LOG) {
+            std::cout << "+-----------------------------------------------------------------------------+\n";
+            std::cout << "[*] found better representation " << this->known_crashes[i].content.size() << " " << crash.content.size() << "\n";
+            std::cout << "[*] Crash at 0x" << std::hex << crash.addr << " with content: \n";
+            printhexnl(crash.content); 
+          
+
+            std::cout << "[*] all crashes: \n";
+            for (int j = 0;  j < this->known_crashes.size(); j++) {
+              std::cout << "0x" << std::hex << this->known_crashes[j].addr << " " << this->known_crashes[j].content.size() << "\n";
+            }
+            std::cout << "+-----------------------------------------------------------------------------+\n";
+          }
+        }
+
+        return;
+      }
+    }
+    
+    this->known_crashes.push_back(crash);
+    return; 
+  }  
+
+  corpus_file get() {
     // check if pool exists if not create
     // select from pool
     // pop from pool
