@@ -68,10 +68,6 @@ private:
                                 read_file(this->corpus_dir + "/" + corpus_file_entry->d_name)}); 
       }
     }
-    /*
-    for (auto x: this->corpus) {
-      std::cout << x.filename << " " << x.content << '\n';
-    }*/
   }
 
   std::string mutate(std::string data){
