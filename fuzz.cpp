@@ -8,14 +8,11 @@
 // Tracer
 //TODO: find base
 //TODO: find offset
-//TODO: get trace
 //TODO: implement proper instrumentation
 
 
 // Mutator
-//TODO: add output to mutator
 //TODO: create actual pool with multiple mutations
-//TODO: write to multiple files when creating pool
 
 std::string cat_path(std::string path, std::string filename) {
   if (path.back() != '/') {

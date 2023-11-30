@@ -18,6 +18,13 @@ std::string read_file(std::string path) {
   return ret;
 }
 
+
+void dump_file(std::string path, std::string content) {
+  std::ofstream out_file(path);
+  out_file << content;
+  out_file.close();
+}
+
 std::string int_to_str(int x) {
   std::stringstream _stream;
   _stream << x;

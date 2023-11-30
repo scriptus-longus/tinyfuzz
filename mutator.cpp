@@ -14,7 +14,8 @@ const int BLOCK_SIZES[] = {1, 2, 4, 8, 16, 32, 64};
 class Mutator {
 private:
   std::string corpus_dir;
-  std::string cases_path = "cases/";
+  std::string cases_path = "cases/";  // TODO: config
+  std::string crashes_path = CRASHES_PATH;
   std::vector<corpus_file> pool;
   std::vector<CrashType> known_crashes;
 
@@ -102,16 +103,26 @@ private:
   }
 
   void create_pool() {
-    // TODO: write to multiple output files
     // TODO: multiple mutions from one corpus sample 
+    int count = 0;
     for (auto x: this->corpus) {
-      this->pool.push_back({this->cases_path + "sample1.txt", mutate(x.content)}); 
+      std::stringstream filename;
+      filename << this->cases_path << "/" << "core_sample_" << count << ".spl";
+      std::string content = mutate(x.content);
+
+      this->pool.push_back({filename.str(), content}); 
+      dump_file(filename.str(), content);
+      count++;
     }
 
     // sample from crashes
     for (int i = 0; i < this->known_crashes.size(); i++) {
-      this->pool.push_back({this->cases_path + "sample_" + long_to_str(this->known_crashes[i].addr) + ".txt", 
-                            mutate(this->known_crashes[i].content)});
+      std::stringstream filename;
+      filename << this->cases_path << "/" << "sample_" << long_to_str(this->known_crashes[i].addr) << ".spl";
+      std::string content = mutate(this->known_crashes[i].content);
+
+      this->pool.push_back({filename.str(), content});
+      dump_file(filename.str(), content);
     }
   }
 
@@ -131,9 +142,13 @@ public:
       //if (this->known_crashes[i].execution_path == crash.execution_path){
       if (crash_eq(this->known_crashes[i], crash)) {
         // check if content is smaller to truncate crash
-
         if (this->known_crashes[i].content.size() > crash.content.size()) {
           this->known_crashes[i] = crash; 
+
+          std::stringstream filename;
+          filename << this->crashes_path << "/" << "crash_" << long_to_str(crash.addr) << ".out";
+          dump_file(filename.str(), crash.content);
+
           if (DEBUG_LOG) {
             std::cout << "+-----------------------------------------------------------------------------+\n";
             std::cout << "[*] found better representation " << this->known_crashes[i].content.size() << " " << crash.content.size() << "\n";
@@ -154,6 +169,11 @@ public:
     }
     
     this->known_crashes.push_back(crash);
+
+    std::stringstream filename;
+    filename << this->crashes_path << "/" << "crash_" << long_to_str(crash.addr) << ".out";
+    dump_file(filename.str(), crash.content);
+
     return; 
   }  
 
@@ -166,14 +186,9 @@ public:
       this->create_pool();
     }
     corpus_file test_case  = this->pool.back();
-  
-    // TODO: put in create pool
-    std::ofstream mutated_file(test_case.filename);
-    mutated_file << test_case.content;
-    mutated_file.close();
 
     std::string content = test_case.content;
-    std::string filename = test_case.filename; 
+    std::string filename = test_case.filename;
 
     this->pool.pop_back();
 

@@ -4,6 +4,7 @@
 #define TEST_CASES_PATH "cases/"
 #define DEBUG_LOG true
 #define BREAKPOINT_FILE ".bp_list"
+#define CRASHES_PATH "crashes/"
 
 #define SEED 1337
 
