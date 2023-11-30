@@ -7,10 +7,6 @@
 #include "fuzz.hpp"
 #include "utils.hpp"
 
-const uint8_t FLIP_ARRAY[] =  {1, 2, 4, 8, 16, 32, 64};
-const int CYCLE_LENS[] =  {1, 2, 4, 8, 16, 32};
-const int BLOCK_SIZES[] = {1, 2, 4, 8, 16, 32, 64};
-
 class Mutator {
 private:
   std::string corpus_dir;
