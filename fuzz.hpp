@@ -7,6 +7,8 @@
 #define CRASHES_PATH "crashes/"
 
 #define SEED 1337
+#define N_BRANCHES 10
+#define STORAGE_ID "/fuzz_map"
 
 #ifndef FUZZ_DATA_STRUCTURES
 #define FUZZ_DATA_STRUCTURES
@@ -30,7 +32,9 @@ struct corpus_file {
 
 struct Crash {
   uint64_t addr;
-  std::vector<uint64_t> execution_path;
+  int id;
+  //std::vector<uint64_t> execution_path;
+  int execution_trace[N_BRANCHES];
   bool segfault;
   std::string content;
 } typedef CrashType;
