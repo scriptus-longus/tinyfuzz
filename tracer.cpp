@@ -12,6 +12,8 @@
 #include <sys/personality.h>
 #include <algorithm>
 #include "fuzz.hpp"
+#include <fcntl.h>
+#include <sys/mman.h>
 
 uint32_t INIT_ADDR = 0x1000;
 
@@ -22,6 +24,7 @@ private:
   std::vector<uint64_t> unique_crashes; 
   std::vector<Breakpoint> breakpoints;
   std::string elf_file;
+  int *trace_addr;
 
   const uint64_t base = 0x555555555000; // TODO: change to config
 
@@ -61,13 +64,27 @@ public:
     this->elf_file = content.str();
 
     load_breakpoints(BREAKPOINT_FILE); 
+
+    int fd = shm_open(STORAGE_ID, O_RDONLY | O_CREAT, S_IRUSR | S_IWUSR);
+    if (fd == -1) {
+      perror("could not open shared memory");
+      exit(0);
+    }
+
+    this->trace_addr = (int *)mmap(NULL, sizeof(int)*N_BRANCHES, PROT_READ, MAP_SHARED, fd, 0);
+    if (this->trace_addr == MAP_FAILED) {
+      perror("mmap"); 
+      exit(0);
+    }
+
   }
 
   CrashType run(const char *data) {
     int status;
     struct user_regs_struct regs;
     siginfo_t signal;
-    std::vector<uint64_t> execution_path;
+    //std::vector<uint64_t> execution_path;
+    int execution_trace[N_BRANCHES];    
     pid_t proc;
   
     CrashType ret;
@@ -81,15 +98,6 @@ public:
 
       execl(program, program, data, NULL);
     } else {
-      wait(NULL);
-
-      for (auto& bp: this->breakpoints) { 
-        ptrace(PTRACE_POKEDATA, proc, 
-                                (uint64_t)(this->base + bp.addr), 
-                                ((bp.instr & ~0xff) | (uint64_t)0xcc & 0xff));
-      }
-
-      ptrace(PTRACE_CONT, proc, NULL, NULL);
 
       while(waitpid(proc, &status, 0)) { 
         // check if program has terminated
@@ -99,21 +107,21 @@ public:
           break;
         }
 
-        ptrace(PTRACE_GETSIGINFO, proc, NULL, &signal);
+        if (ptrace(PTRACE_GETSIGINFO, proc, NULL, &signal) == -1) 
+          std::cout << "received signal, but can't get further information\n";
         if (ptrace(PTRACE_GETREGS, proc, NULL, &regs) == -1) 
           std::cout << "cant read regs\n";
 
         if (signal.si_signo == SIGSEGV) {
           break;
-        } else if (signal.si_signo == SIGTRAP) {
-          execution_path.push_back(regs.rip);  // TODO: check independence
-        }
-      
+        }         
         ptrace(PTRACE_CONT, proc, NULL, NULL);
       }
 
+      // program has exited
+      memcpy(ret.execution_trace, this->trace_addr, sizeof(int)*N_BRANCHES);
+
       ret.addr = regs.rip;
-      ret.execution_path = execution_path;
       ret.segfault = false;
 
       // check if crash was sigsegv and unique
@@ -126,7 +134,8 @@ public:
           std::cout << "=============================================\n"; 
 
         } 
-
+          
+        // TODO: remove from tracer 
         if (!std::count(this->unique_crashes.begin(), this->unique_crashes.end(), regs.rip)) {
           this->unique_crashes.push_back(regs.rip);
           //return true;
