@@ -88,7 +88,7 @@ private:
   }
 
   bool crash_eq(CrashType c1, CrashType c2) {
-    if (c1.execution_path == c2.execution_path && c1.addr == c2.addr) {
+    if (memcmp(c1.execution_trace, c2.execution_trace, sizeof(int)*N_BRANCHES) == 0 && c1.addr == c2.addr) {
       return true;
     } 
     return false;
@@ -96,21 +96,20 @@ private:
 
   void create_pool() {
     // TODO: multiple mutions from one corpus sample 
-    int count = 0;
-    for (auto x: this->corpus) {
+
+    for (int i = 0; i < this->corpus.size(); i++) {
       std::stringstream filename;
-      filename << this->cases_path << "/" << "core_sample_" << count << ".spl";
-      std::string content = mutate(x.content);
+      filename << this->cases_path << "/" << "core_sample_" << i << ".spl";
+      std::string content = mutate(this->corpus[i].content);
 
       this->pool.push_back({filename.str(), content}); 
       dump_file(filename.str(), content);
-      count++;
     }
 
     // sample from crashes
     for (int i = 0; i < this->known_crashes.size(); i++) {
       std::stringstream filename;
-      filename << this->cases_path << "/" << "sample_" << long_to_str(this->known_crashes[i].addr) << ".spl";
+      filename << this->cases_path << "/" << "sample_" << long_to_str(this->known_crashes[i].id) << ".spl";
       std::string content = mutate(this->known_crashes[i].content);
 
       this->pool.push_back({filename.str(), content});
@@ -130,15 +129,17 @@ public:
   }
 
   void add(CrashType crash) {
+
     for (int i = 0;  i < this->known_crashes.size(); i++) {
       //if (this->known_crashes[i].execution_path == crash.execution_path){
       if (crash_eq(this->known_crashes[i], crash)) {
         // check if content is smaller to truncate crash
-        if (this->known_crashes[i].content.size() > crash.content.size()) {
+        if (this->known_crashes[i].content.size() > crash.content.size() && this->known_crashes[i].content.size() >= 10) {
+          crash.id = known_crashes[i].id;
           this->known_crashes[i] = crash; 
 
           std::stringstream filename;
-          filename << this->crashes_path << "/" << "crash_" << long_to_str(crash.addr) << ".out";
+          filename << this->crashes_path << "/" << "crash_" << long_to_str(crash.id) << ".out";
           dump_file(filename.str(), crash.content);
 
           if (DEBUG_LOG) {
@@ -159,11 +160,14 @@ public:
         return;
       }
     }
-    
+   
+    crash.id = rand() % 0xffffff; 
+    std::cout << crash.id << "\n";
     this->known_crashes.push_back(crash);
 
+
     std::stringstream filename;
-    filename << this->crashes_path << "/" << "crash_" << long_to_str(crash.addr) << ".out";
+    filename << this->crashes_path << "/" << "crash_" << long_to_str(crash.id) << ".out";
     dump_file(filename.str(), crash.content);
 
     return; 
