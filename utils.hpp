@@ -4,6 +4,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <cstring>
 
 std::string read_file(std::string path) {
   std::ifstream file_stream(path);
@@ -18,6 +19,14 @@ std::string read_file(std::string path) {
   return ret;
 }
 
+
+bool string_startswith(std::string a, std::string b) {
+  if (strncmp(a.c_str(), b.c_str(), strlen(b.c_str())) == 0) {
+    return true;
+  } else {
+    return false;
+  }
+}
 
 void dump_file(std::string path, std::string content) {
   std::ofstream out_file(path);
