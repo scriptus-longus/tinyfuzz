@@ -4,15 +4,19 @@
 #include "tracer.cpp"
 #include "mutator.cpp"
 #include "fuzz.hpp"
+#include <signal.h>
 
 // Tracer
-//TODO: find base
-//TODO: find offset
-//TODO: implement proper instrumentation
-
+// TODO: speed
 
 // Mutator
 //TODO: create actual pool with multiple mutations
+//TODO: 
+
+// fuzz
+// TODO: good output (non debug)
+// TODO: catch ctrl-c
+bool keep_fuzzing = true;
 
 std::string cat_path(std::string path, std::string filename) {
   if (path.back() != '/') {
@@ -55,38 +59,46 @@ uint64_t find_base_addr(uint64_t pid, std::string program_name) {
   return ret; 
 }
 
+void exit_signal_handler(int s) {
+  std::cout << "exiting..." << '\n';
+  keep_fuzzing = false;
+}
 
 int main(int argc, char *argv[]) {
   const std::string target = TARGET_PROGRAM;
   const std::string corpus_dir = CORPUS_DIR;
   const std::string cases_dir = TEST_CASES_PATH;
   std::vector<corpus_file> corpus_files; 
+
+  signal(SIGINT, exit_signal_handler);
   
   Tracer tracer = Tracer(target.c_str());
   Mutator mutator = Mutator(corpus_dir, SEED);
 
    
-  while (1) {
+  while (keep_fuzzing) {
     corpus_file test_case = mutator.get();
 
-    CrashType crash = tracer.run(test_case.filename.c_str());
+    ExecTrace trace = tracer.run(test_case.filename.c_str());
 
-    crash.content = test_case.content;
-    
-    mutator.add(crash);
-
-    if (crash.segfault) {
-      std::cout << "[*] Found crash ... at 0x" << std::hex << crash.addr<< "\n";
+    trace.content = test_case.content;
+ 
+    mutator.add(trace);
+    /*
+    if (trace.segfault) {
+      std::cout << "[*] Found crash ... at 0x" << std::hex << trace.addr<< "\n";
       std::cout << "content ";
 
-      for (auto c: crash.content) {
+      for (auto c: trace.content) {
         std::cout << std::hex << int((uint8_t)c) << " ";
       }
 
       std::cout << "\n";
-    }
+    }*/
 
   }
+  //tracer.~Tracer();
+  //delete mutator;
 
   return 0;
 }

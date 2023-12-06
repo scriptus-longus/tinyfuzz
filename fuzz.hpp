@@ -1,14 +1,13 @@
-
-#define TARGET_PROGRAM "target/simple"
-#define CORPUS_DIR "corpus/"
-#define TEST_CASES_PATH "cases/"
+#define TARGET_PROGRAM "target/simple_instr"
+#define CORPUS_DIR "corpus/"               // core corpus files
+#define TEST_CASES_PATH "cases/"           // path where cases for fuzz cycle are dumped
 #define DEBUG_LOG true
-#define BREAKPOINT_FILE ".bp_list"
-#define CRASHES_PATH "crashes/"
+#define CRASHES_PATH "crashes/"            // detected crashes 
 
 #define SEED 1337
-#define N_BRANCHES 10
-#define STORAGE_ID "/fuzz_map"
+#define SHARED_MEM_SIZE 1024
+
+#define MIN_TRACE_CONTENT_SIZE 10         // minimal size for a sample to trigger crash
 
 #ifndef FUZZ_DATA_STRUCTURES
 #define FUZZ_DATA_STRUCTURES
@@ -30,14 +29,13 @@ struct corpus_file {
   std::string content;
 } typedef corpus_file;
 
-struct Crash {
+struct ExecTrace {
   uint64_t addr;
-  int id;
-  //std::vector<uint64_t> execution_path;
-  int execution_trace[N_BRANCHES];
+  int id;                                // used to uniquly identify and write to file
+  int execution_trace[SHARED_MEM_SIZE];
   bool segfault;
   std::string content;
-} typedef CrashType;
+} typedef ExecTrace;
 
 #endif
 
