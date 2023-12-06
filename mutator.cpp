@@ -13,7 +13,7 @@ private:
   std::string cases_path = "cases/";  // TODO: config
   std::string crashes_path = CRASHES_PATH;
   std::vector<corpus_file> pool;
-  std::vector<CrashType> known_crashes;
+  std::vector<ExecTrace> observed_traces;            // not known crashes 
 
   void bit_flip(std::string &data, uint32_t idx) {
     uint8_t bit = FLIP_ARRAY[rand() % 7];
@@ -87,8 +87,8 @@ private:
     return ret;
   }
 
-  bool crash_eq(CrashType c1, CrashType c2) {
-    if (memcmp(c1.execution_trace, c2.execution_trace, sizeof(int)*N_BRANCHES) == 0 && c1.addr == c2.addr) {
+  bool trace_eq(ExecTrace c1, ExecTrace c2) {
+    if (memcmp(c1.execution_trace, c2.execution_trace, sizeof(int)*SHARED_MEM_SIZE) == 0 && c1.addr == c2.addr) {
       return true;
     } 
     return false;
@@ -107,10 +107,11 @@ private:
     }
 
     // sample from crashes
-    for (int i = 0; i < this->known_crashes.size(); i++) {
+    for (int i = 0; i < this->observed_traces.size(); i++) {
       std::stringstream filename;
-      filename << this->cases_path << "/" << "sample_" << long_to_str(this->known_crashes[i].id) << ".spl";
-      std::string content = mutate(this->known_crashes[i].content);
+      filename << this->cases_path << "/" << "sample_" << long_to_str(this->observed_traces[i].id) << ".spl";
+
+      std::string content = mutate(this->observed_traces[i].content);
 
       this->pool.push_back({filename.str(), content});
       dump_file(filename.str(), content);
@@ -128,30 +129,29 @@ public:
     this->create_pool();
   }
 
-  void add(CrashType crash) {
-
-    for (int i = 0;  i < this->known_crashes.size(); i++) {
-      //if (this->known_crashes[i].execution_path == crash.execution_path){
-      if (crash_eq(this->known_crashes[i], crash)) {
+  void add(ExecTrace trace) {
+    for (int i = 0;  i < this->observed_traces.size(); i++) {
+      if (trace_eq(this->observed_traces[i], trace)) {
         // check if content is smaller to truncate crash
-        if (this->known_crashes[i].content.size() > crash.content.size() && this->known_crashes[i].content.size() >= 10) {
-          crash.id = known_crashes[i].id;
-          this->known_crashes[i] = crash; 
+        if (this->observed_traces[i].content.size() > trace.content.size() && 
+            this->observed_traces[i].content.size() >= MIN_TRACE_CONTENT_SIZE) {
+          trace.id = observed_traces[i].id;
+          this->observed_traces[i] = trace; 
 
-          std::stringstream filename;
-          filename << this->crashes_path << "/" << "crash_" << long_to_str(crash.id) << ".out";
-          dump_file(filename.str(), crash.content);
+          //std::stringstream filename;
+          //filename << this->crashes_path << "/" << "crash_" << long_to_str(crash.id) << ".out";
+          //dump_file(filename.str(), crash.content);
 
           if (DEBUG_LOG) {
             std::cout << "+-----------------------------------------------------------------------------+\n";
-            std::cout << "[*] found better representation " << this->known_crashes[i].content.size() << " " << crash.content.size() << "\n";
-            std::cout << "[*] Crash at 0x" << std::hex << crash.addr << " with content: \n";
-            printhexnl(crash.content); 
+            std::cout << "[*] found better representation " << "\n";
+            std::cout << "[*] Crash at 0x" << std::hex << trace.addr << " with content: \n";
+            printhexnl(trace.content); 
           
 
             std::cout << "[*] all crashes: \n";
-            for (int j = 0;  j < this->known_crashes.size(); j++) {
-              std::cout << "0x" << std::hex << this->known_crashes[j].addr << " " << this->known_crashes[j].content.size() << "\n";
+            for (int j = 0;  j < this->observed_traces.size(); j++) {
+              std::cout << "0x" << std::hex << this->observed_traces[j].addr << " " << this->observed_traces[j].content.size() << "\n";
             }
             std::cout << "+-----------------------------------------------------------------------------+\n";
           }
@@ -161,14 +161,39 @@ public:
       }
     }
    
-    crash.id = rand() % 0xffffff; 
-    std::cout << crash.id << "\n";
-    this->known_crashes.push_back(crash);
+    if (trace.segfault) {
+      std::cout << "+-----------------------------------------------------------------------------+\n";
+      std::cout << "[*] FOUND a unique crash of length" << trace.content.size() << "\n";
+      std::cout << "[*] Crash at 0x" << std::hex << trace.addr << " with content: \n";
+      printhexnl(trace.content); 
+      std::cout << "+-----------------------------------------------------------------------------+\n";
 
+      std::stringstream filename;
+      filename << this->crashes_path << "/" << "crash_" << long_to_str(trace.id) << ".out";
+      dump_file(filename.str(), trace.content);
+    }
 
-    std::stringstream filename;
-    filename << this->crashes_path << "/" << "crash_" << long_to_str(crash.id) << ".out";
-    dump_file(filename.str(), crash.content);
+    trace.id = rand() % 0xffffff; 
+    std::cout << trace.id << "\n";
+    this->observed_traces.push_back(trace);
+
+    if (DEBUG_LOG && !trace.segfault) {
+      std::cout << "+-----------------------------------------------------------------------------+\n";
+      std::cout << "[*] Found new Execution Trace of legth: " << trace.content.size() << "\n";
+      std::cout << "[*] End at 0x" << std::hex << trace.addr << " with content: \n";
+      printhexnl(trace.content); 
+          
+
+      std::cout << "[*] all observed traces: \n";
+      for (int j = 0;  j < this->observed_traces.size(); j++) {
+        std::cout << "id: " << this->observed_traces[j].id << " finished at " << "0x" << std::hex << this->observed_traces[j].addr << " " << this->observed_traces[j].content.size() << "\n";
+      }
+      std::cout << "+-----------------------------------------------------------------------------+\n";
+    }
+
+    //std::stringstream filename;
+    //filename << this->crashes_path << "/" << "crash_" << long_to_str(crash.id) << ".out";
+    //dump_file(filename.str(), crash.content);
 
     return; 
   }  
