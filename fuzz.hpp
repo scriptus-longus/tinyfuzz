@@ -15,14 +15,9 @@
 #include <vector>
 #include <string>
 
-const uint8_t FLIP_ARRAY[] =  {1, 2, 4, 8, 16, 32, 64};
+const char FLIP_ARRAY[] =  {1, 2, 4, 8, 16, 32, 64};
 const int CYCLE_LENS[] =  {1, 2, 4, 8, 16, 32};
 const int BLOCK_SIZES[] = {1, 2, 4, 8, 16, 32, 64};
-
-struct Breakpoint {
-  uint32_t addr;
-  uint64_t instr;
-} typedef Breakpoint;
 
 struct corpus_file {
   std::string filename;
@@ -30,7 +25,7 @@ struct corpus_file {
 } typedef corpus_file;
 
 struct ExecTrace {
-  uint64_t addr;
+  long addr;
   int id;                                // used to uniquly identify and write to file
   int execution_trace[SHARED_MEM_SIZE];
   bool segfault;
