@@ -4,6 +4,7 @@
 #include <vector>
 #include <fstream>
 #include <sstream>
+#include <stdint.h>
 #include "fuzz.hpp"
 #include "utils.hpp"
 
@@ -138,10 +139,6 @@ public:
           trace.id = observed_traces[i].id;
           this->observed_traces[i] = trace; 
 
-          //std::stringstream filename;
-          //filename << this->crashes_path << "/" << "crash_" << long_to_str(crash.id) << ".out";
-          //dump_file(filename.str(), crash.content);
-
           if (DEBUG_LOG) {
             std::cout << "+-----------------------------------------------------------------------------+\n";
             std::cout << "[*] found better representation " << "\n";
@@ -163,7 +160,7 @@ public:
    
     if (trace.segfault) {
       std::cout << "+-----------------------------------------------------------------------------+\n";
-      std::cout << "[*] FOUND a unique crash of length" << trace.content.size() << "\n";
+      std::cout << "[*] FOUND a unique crash of length " << trace.content.size() << "\n";
       std::cout << "[*] Crash at 0x" << std::hex << trace.addr << " with content: \n";
       printhexnl(trace.content); 
       std::cout << "+-----------------------------------------------------------------------------+\n";
@@ -174,7 +171,6 @@ public:
     }
 
     trace.id = rand() % 0xffffff; 
-    std::cout << trace.id << "\n";
     this->observed_traces.push_back(trace);
 
     if (DEBUG_LOG && !trace.segfault) {
@@ -190,11 +186,7 @@ public:
       }
       std::cout << "+-----------------------------------------------------------------------------+\n";
     }
-
-    //std::stringstream filename;
-    //filename << this->crashes_path << "/" << "crash_" << long_to_str(crash.id) << ".out";
-    //dump_file(filename.str(), crash.content);
-
+    
     return; 
   }  
 

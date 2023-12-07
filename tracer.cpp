@@ -6,6 +6,7 @@
 #include <cstring>
 #include <sys/personality.h>
 #include <sys/shm.h>
+#include <stdint.h>
 #include "fuzz.hpp"
 
 class Tracer {

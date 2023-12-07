@@ -6,6 +6,7 @@
 #include "fuzz.hpp"
 #include "utils.hpp"
 #include "fuzz-gcc.hpp"
+#include <stdint.h>
 
 bool inserted_init = false;
 bool in_main = false;
@@ -54,7 +55,6 @@ int main(int argc, char **argv) {
   std::stringstream outfile_name;
   outfile_name << argv[2]; 
 
-  dump_file(outfile_name.str(), outfile_content);  // TODO: change static filename
-
+  dump_file(outfile_name.str(), outfile_content); 
   return 0;
 }

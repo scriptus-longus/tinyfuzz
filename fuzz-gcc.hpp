@@ -48,7 +48,7 @@ std::string get_jump_code(int n) {
   "\n\t/* INSTRUMENTATION NR. " << n << " */\n"
   "\tmovq  _shmem_trace_buffer(%rip), %rax\n"
   "\taddq  $" << n*4 << ", %rax\n"
-  "\tadd	$1, (%rax)\n"
+  "\taddq	$1, (%rax)\n"
   "\t/*   END   */\n\n";
   
   return jump_instr_code.str();

@@ -5,6 +5,7 @@
 #include <sstream>
 #include <string>
 #include <cstring>
+#include <stdint.h>
 
 std::string read_file(std::string path) {
   std::ifstream file_stream(path);
