@@ -12,22 +12,10 @@
 
 
 int main() {
-  //int fd = shm_open(STORAGE_ID, O_RDONLY, S_IRUSR | S_IWUSR);
-  //if (fd == -1) {
-  //  perror("open");
-  //  return -1;
-  //}
-
   printf("unlinking\n");
   int segid = shmget(0x1001, SHARED_MEM_SIZE*sizeof(int), IPC_EXCL | S_IRUSR | S_IWUSR);
 
   shmctl(segid, IPC_RMID, 0);
-  /*
-  fd = shm_unlink("/fuzz_map");
-  if (fd == -1) {
-    perror("unlink"); 
-    return -1;
-  }*/
 
   return 0;
 }
