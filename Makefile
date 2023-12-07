@@ -10,8 +10,8 @@ fuzz:
 
 target: fuzz-gcc
 	gcc -S $(SOURCE_FILE) -o $(OUTPUT_PROG_NAME).s
-	./fuzz-gcc $(OUTPUT_PROG_NAME).s $(OUTPUT_PROG_NAME)_instr.s
-	gcc  $(OUTPUT_PROG_NAME)_instr.s -o $(OUTPUT_PROG_NAME)
+	./fuzz-gcc $(OUTPUT_PROG_NAME).s $(OUTPUT_PROG_NAME).s
+	gcc  $(OUTPUT_PROG_NAME).s -o $(OUTPUT_PROG_NAME)
 
 fuzz-gcc:
 	g++ fuzz-gcc.cpp -o fuzz-gcc
