@@ -11,9 +11,12 @@
 
 #ifndef FUZZ_DATA_STRUCTURES
 #define FUZZ_DATA_STRUCTURES
+
+#include <stdint.h>
 #include <stdio.h>
 #include <vector>
 #include <string>
+#include <stdint.h>
 
 const char FLIP_ARRAY[] =  {1, 2, 4, 8, 16, 32, 64};
 const int CYCLE_LENS[] =  {1, 2, 4, 8, 16, 32};
@@ -25,7 +28,7 @@ struct corpus_file {
 } typedef corpus_file;
 
 struct ExecTrace {
-  long addr;
+  uint64_t addr;
   int id;                                // used to uniquly identify and write to file
   int execution_trace[SHARED_MEM_SIZE];
   bool segfault;
